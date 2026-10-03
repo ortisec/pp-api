@@ -1,0 +1,41 @@
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: pp-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-podemos}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-podemos}
+      POSTGRES_DB: ${POSTGRES_DB:-podemos_peru}
+    volumes:
+      - pp_db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-podemos} -d ${POSTGRES_DB:-podemos_peru}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  api:
+    build: .
+    container_name: pp-api
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-podemos}:${POSTGRES_PASSWORD:-podemos}@db:5432/${POSTGRES_DB:-podemos_peru}
+      SECRET_KEY: ${SECRET_KEY:-cambia-esta-clave-en-produccion}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:5173}
+      SEED_ON_STARTUP: ${SEED_ON_STARTUP:-true}
+      ADMIN_USERNAME: ${ADMIN_USERNAME:-admin}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-admin123}
+      APISPERU_TOKEN: ${APISPERU_TOKEN:-}
+      APISPERU_BASE_URL: ${APISPERU_BASE_URL:-https://dniruc.apisperu.com/api/v1}
+    ports:
+      # Solo accesible desde el propio VPS (Nginx hace el proxy). Cambia 8477
+      # si lo necesitas; el host interno del contenedor sigue siendo 8000.
+      - "127.0.0.1:${API_PORT:-8477}:8000"
+    entrypoint: ["sh", "entrypoint.sh"]
+
+volumes:
+  pp_db_data:
