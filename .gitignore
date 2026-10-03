@@ -9,6 +9,7 @@ wheels/
 
 # Entorno
 .env
+docker-compose.override.yml
 
 # Tests / cache
 .pytest_cache/
