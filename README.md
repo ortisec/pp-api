@@ -79,33 +79,47 @@ uv run pytest
 
 ## Despliegue en VPS
 
-1. Clona el repo y copia el entorno:
+### Opcion A: EasyPanel (recomendado)
 
-   ```bash
-   cp .env.example .env
-   ```
-
-2. Edita `.env` con valores de produccion:
+1. En EasyPanel crea un servicio **Compose** apuntando a tu repositorio Git y
+   con la ruta del compose `pp-api/docker-compose.yml`.
+2. Define las variables de entorno en EasyPanel (pestana Environment), no en un
+   archivo `.env`:
 
    ```
    SECRET_KEY=<clave-larga-y-aleatoria>
    ADMIN_PASSWORD=<contrasena-fuerte>
-   CORS_ORIGINS=https://tudominio.com
+   CORS_ORIGINS=https://tu-front.vercel.app
    APISPERU_TOKEN=<tu_token>
-   API_PORT=8477
+   SEED_ON_STARTUP=true
    ```
 
-3. Levanta el stack:
+3. En **Dominios**, apunta tu dominio al servicio `api` en el puerto **8000**
+   (puerto interno del contenedor). Ejemplo: `http://api:8000`.
+   No uses el puerto 8477 ni `127.0.0.1`.
+4. EasyPanel/Traefik se encarga del TLS y del enrutamiento; el WebSocket
+   (`/api/v1/ws/results`) funciona porque Traefik hace upgrade automaticamente.
 
-   ```bash
-   docker compose up -d --build
+> El compose no usa `container_name` ni publica puertos al host, para evitar
+> conflictos con otros servicios de EasyPanel. La API solo expone el puerto
+> interno `8000` (`expose`) y la base de datos no publica nada.
+
+> Importante: en `CORS_ORIGINS` coloca el dominio real del frontend (Vercel).
+> Si usas subdominios separados para front y API, agrega ambos separados por
+> coma.
+
+### Opcion B: Nginx manual
+
+1. Copia `.env.example` a `.env` y ajusta los valores de produccion.
+2. Levanta el stack con un mapeo de puerto en el host:
+
+   ```yaml
+   # en el servicio api
+   ports:
+     - "127.0.0.1:8477:8000"
    ```
 
-   La API queda escuchando **solo** en `127.0.0.1:8477` (no se expone a
-   internet) y PostgreSQL no publica puerto al host. El `entrypoint.sh` espera
-   la base de datos y aplica las migraciones.
-
-4. Nginx como proxy inverso (TLS con certbot):
+3. Nginx como proxy inverso (TLS con certbot):
 
    ```nginx
    server {
@@ -128,7 +142,5 @@ uv run pytest
    }
    ```
 
-5. Firewall: abre solo `80`, `443` y `22`. Nunca expongas `8477` ni `5432`.
-
-Si cambias `API_PORT`, actualiza tambien el `proxy_pass` de Nginx.
+4. Firewall: abre solo `80`, `443` y `22`. Nunca expongas `5432`.
 

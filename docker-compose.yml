@@ -1,7 +1,6 @@
 services:
   db:
     image: postgres:16-alpine
-    container_name: pp-db
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-podemos}
@@ -17,7 +16,6 @@ services:
 
   api:
     build: .
-    container_name: pp-api
     restart: unless-stopped
     depends_on:
       db:
@@ -31,10 +29,8 @@ services:
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:-admin123}
       APISPERU_TOKEN: ${APISPERU_TOKEN:-}
       APISPERU_BASE_URL: ${APISPERU_BASE_URL:-https://dniruc.apisperu.com/api/v1}
-    ports:
-      # Solo accesible desde el propio VPS (Nginx hace el proxy). Cambia 8477
-      # si lo necesitas; el host interno del contenedor sigue siendo 8000.
-      - "127.0.0.1:${API_PORT:-8477}:8000"
+    expose:
+      - "8000"
     entrypoint: ["sh", "entrypoint.sh"]
 
 volumes:
