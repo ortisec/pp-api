@@ -3,7 +3,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.security import hash_password
-from app.db.base import Category, Role
+from app.db.base import ACTIVE_CATEGORIES, Category, Role
 from app.db.session import get_db
 from app.models import (
     Assignment,
@@ -209,12 +209,12 @@ def create_table(payload: PollingTableCreate, db: Session = Depends(get_db)):
     db.add(obj)
     db.flush()
 
-    # Auto-vincular la nueva mesa con TODOS los partidos del proceso, en todas las categorias
+    # Auto-vincular la nueva mesa con TODOS los partidos del proceso (categorias activas)
     parties = db.execute(
         select(PoliticalParty).where(PoliticalParty.process_id == payload.process_id)
     ).scalars().all()
     for party in parties:
-        for cat in Category:
+        for cat in ACTIVE_CATEGORIES:
             db.add(TableParty(table_id=obj.id, category=cat, party_id=party.id))
 
     db.commit()
@@ -258,12 +258,12 @@ def create_party(payload: PoliticalPartyCreate, db: Session = Depends(get_db)):
     db.add(obj)
     db.flush()
 
-    # Auto-vincular el nuevo partido a TODAS las mesas del proceso, en todas las categorias
+    # Auto-vincular el nuevo partido a TODAS las mesas del proceso (categorias activas)
     tables = db.execute(
         select(PollingTable).where(PollingTable.process_id == payload.process_id)
     ).scalars().all()
     for table in tables:
-        for cat in Category:
+        for cat in ACTIVE_CATEGORIES:
             db.add(TableParty(table_id=table.id, category=cat, party_id=obj.id))
 
     db.commit()
@@ -536,7 +536,7 @@ def sync_table_parties(process_id: int, db: Session = Depends(get_db)):
     created = 0
     for table in tables:
         for party in parties:
-            for cat in Category:
+            for cat in ACTIVE_CATEGORIES:
                 key = (table.id, cat, party.id)
                 if key not in existing:
                     db.add(TableParty(table_id=table.id, category=cat, party_id=party.id))

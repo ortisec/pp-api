@@ -1,4 +1,4 @@
-from app.db.base import Category, VoteType
+from app.db.base import ACTIVE_CATEGORIES, Category, VoteType
 from app.models import VoteRecord
 from app.schemas import (
     CategoryResult,
@@ -11,9 +11,11 @@ from app.schemas import (
 def categorize_entries(record: VoteRecord) -> dict[Category, dict]:
     data: dict[Category, dict] = {
         cat: {"validos": 0, "nulos": 0, "blancos": 0, "parties": {}}
-        for cat in Category
+        for cat in ACTIVE_CATEGORIES
     }
     for entry in record.entries:
+        if entry.category not in data:
+            continue
         bucket = data[entry.category]
         if entry.vote_type == VoteType.VALIDO:
             bucket["validos"] += entry.quantity
@@ -55,7 +57,7 @@ def is_balanced(record: VoteRecord) -> bool:
 def build_table_result(record: VoteRecord) -> TableResult:
     data = categorize_entries(record)
     categories: list[CategoryResult] = []
-    for category in Category:
+    for category in ACTIVE_CATEGORIES:
         bucket = data[category]
         total = bucket["validos"] + bucket["nulos"] + bucket["blancos"]
         parties: list[PartyResult] = []

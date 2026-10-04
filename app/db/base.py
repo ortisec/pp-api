@@ -36,6 +36,10 @@ class Category(enum.StrEnum):
     DISTRITO = "DISTRITO"
 
 
+# Categorias activas de votacion (unicamente distrital y provincial)
+ACTIVE_CATEGORIES: tuple[Category, ...] = (Category.PROVINCIA, Category.DISTRITO)
+
+
 class VoteType(enum.StrEnum):
     VALIDO = "VALIDO"
     NULO = "NULO"

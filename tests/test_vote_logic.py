@@ -1,6 +1,6 @@
 from types import SimpleNamespace
 
-from app.db.base import Category, VoteType
+from app.db.base import ACTIVE_CATEGORIES, Category, VoteType
 from app.services.vote_logic import is_balanced, validate_record
 
 
@@ -28,7 +28,7 @@ class FakeRecord:
 
 def build_balanced_entries():
     entries = []
-    for cat in Category:
+    for cat in ACTIVE_CATEGORIES:
         entries.append(FakeEntry(cat, VoteType.VALIDO, 1, 30))
         entries.append(FakeEntry(cat, VoteType.VALIDO, 2, 18))
         entries.append(FakeEntry(cat, VoteType.VALIDO, 3, 100))
@@ -41,7 +41,7 @@ def test_balanced_record():
     record = FakeRecord(build_balanced_entries(), total_asistentes=170)
     assert is_balanced(record) is True
     results = validate_record(record)
-    assert len(results) == 4
+    assert len(results) == len(ACTIVE_CATEGORIES)
     assert all(r.total_categoria == 170 for r in results)
 
 

@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.db.base import Category, RecordStatus, Role, VoteType
+from app.db.base import ACTIVE_CATEGORIES, Category, RecordStatus, Role, VoteType
 from app.db.session import get_db
 from app.models import (
     PoliticalParty,
@@ -29,25 +29,32 @@ router = APIRouter(tags=["votos"])
 
 
 def _allowed_parties(db: Session, table_id: int, process_id: int) -> dict[Category, set[int]]:
-    """Devuelve los partidos permitidos por categoria para una mesa.
+    """Devuelve los partidos permitidos por categoria activa para una mesa.
 
+    Unicamente trabaja con categorias activas (PROVINCIA y DISTRITO).
     Si existen registros TableParty explicitos para la mesa, se usan esos.
     Si no hay ninguno, se devuelven TODOS los partidos del proceso para
-    todas las categorias (fallback automatico).
+    las categorias activas (fallback automatico).
     """
-    rows = db.execute(select(TableParty).where(TableParty.table_id == table_id)).scalars().all()
-    result: dict[Category, set[int]] = {cat: set() for cat in Category}
+    rows = db.execute(
+        select(TableParty).where(
+            TableParty.table_id == table_id,
+            TableParty.category.in_(ACTIVE_CATEGORIES),
+        )
+    ).scalars().all()
+    result: dict[Category, set[int]] = {cat: set() for cat in ACTIVE_CATEGORIES}
     if rows:
         for row in rows:
-            result[row.category].add(row.party_id)
+            if row.category in result:
+                result[row.category].add(row.party_id)
     else:
-        # Fallback: todos los partidos del proceso aplican a todas las categorias
+        # Fallback: todos los partidos del proceso aplican a las categorias activas
         all_party_ids = set(
             db.execute(
                 select(PoliticalParty.id).where(PoliticalParty.process_id == process_id)
             ).scalars().all()
         )
-        for cat in Category:
+        for cat in ACTIVE_CATEGORIES:
             result[cat] = set(all_party_ids)
     return result
 
@@ -143,10 +150,13 @@ def _validate_input(
     total_asistentes = payload.total_asistentes
 
     entries: list[VoteEntry] = []
-    totals: dict[Category, int] = {cat: 0 for cat in Category}
+    totals: dict[Category, int] = {cat: 0 for cat in ACTIVE_CATEGORIES}
     seen: set[tuple] = set()
 
     for item in payload.entries:
+        if item.category not in ACTIVE_CATEGORIES:
+            continue
+
         key = (item.category, item.vote_type, item.party_id)
         if key in seen:
             raise HTTPException(400, f"Entrada duplicada: {key}")

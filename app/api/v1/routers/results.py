@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
-from app.db.base import Category, RecordStatus, VoteType
+from app.db.base import ACTIVE_CATEGORIES, Category, RecordStatus, VoteType
 from app.db.session import get_db
 from app.models import District, PollingTable, Province, School, VoteEntry, VoteRecord
 from app.schemas import (
@@ -125,9 +125,9 @@ def analytics(
         _records_query(process_id, province_id, district_id, school_id, status)
     ).scalars().all()
 
-    # Ranking por categoria
+    # Ranking por categoria (solo categorias activas)
     rankings: list[CategoryRanking] = []
-    for category in Category:
+    for category in ACTIVE_CATEGORIES:
         votes: dict[int, int] = {}
         names: dict[int, tuple[str, str | None]] = {}
         for record in records:
