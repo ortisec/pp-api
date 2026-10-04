@@ -3,7 +3,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.security import hash_password
-from app.db.base import Role
+from app.db.base import Category, Role
 from app.db.session import get_db
 from app.models import (
     Assignment,
@@ -207,6 +207,16 @@ def create_table(payload: PollingTableCreate, db: Session = Depends(get_db)):
     _get_or_404(db, School, payload.school_id, "Centro")
     obj = PollingTable(**payload.model_dump())
     db.add(obj)
+    db.flush()
+
+    # Auto-vincular la nueva mesa con TODOS los partidos del proceso, en todas las categorias
+    parties = db.execute(
+        select(PoliticalParty).where(PoliticalParty.process_id == payload.process_id)
+    ).scalars().all()
+    for party in parties:
+        for cat in Category:
+            db.add(TableParty(table_id=obj.id, category=cat, party_id=party.id))
+
     db.commit()
     db.refresh(obj)
     return obj
@@ -246,6 +256,16 @@ def create_party(payload: PoliticalPartyCreate, db: Session = Depends(get_db)):
     _get_or_404(db, ElectoralProcess, payload.process_id, "Proceso")
     obj = PoliticalParty(**payload.model_dump())
     db.add(obj)
+    db.flush()
+
+    # Auto-vincular el nuevo partido a TODAS las mesas del proceso, en todas las categorias
+    tables = db.execute(
+        select(PollingTable).where(PollingTable.process_id == payload.process_id)
+    ).scalars().all()
+    for table in tables:
+        for cat in Category:
+            db.add(TableParty(table_id=table.id, category=cat, party_id=obj.id))
+
     db.commit()
     db.refresh(obj)
     return obj
@@ -485,3 +505,47 @@ def list_table_parties(table_id: int, db: Session = Depends(get_db)):
     return db.execute(
         select(TableParty).where(TableParty.table_id == table_id)
     ).scalars().all()
+
+
+@router.post("/table-parties/sync")
+def sync_table_parties(process_id: int, db: Session = Depends(get_db)):
+    """Sincroniza los partidos con todas las mesas del proceso.
+
+    Crea los registros TableParty faltantes para que cada mesa tenga
+    todos los partidos del proceso vinculados en todas las categorias.
+    No borra ni duplica registros existentes.
+    """
+    _get_or_404(db, ElectoralProcess, process_id, "Proceso")
+    tables = db.execute(
+        select(PollingTable).where(PollingTable.process_id == process_id)
+    ).scalars().all()
+    parties = db.execute(
+        select(PoliticalParty).where(PoliticalParty.process_id == process_id)
+    ).scalars().all()
+
+    # Obtener los vinculos existentes para no duplicar
+    existing = set()
+    all_tp = db.execute(
+        select(TableParty).where(
+            TableParty.table_id.in_([t.id for t in tables])
+        )
+    ).scalars().all() if tables else []
+    for tp in all_tp:
+        existing.add((tp.table_id, tp.category, tp.party_id))
+
+    created = 0
+    for table in tables:
+        for party in parties:
+            for cat in Category:
+                key = (table.id, cat, party.id)
+                if key not in existing:
+                    db.add(TableParty(table_id=table.id, category=cat, party_id=party.id))
+                    created += 1
+
+    db.commit()
+    return {
+        "message": f"Sincronizacion completada: {created} vinculos creados.",
+        "tables": len(tables),
+        "parties": len(parties),
+        "created": created,
+    }

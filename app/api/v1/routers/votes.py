@@ -28,11 +28,27 @@ from app.services.vote_logic import build_table_result, validate_record
 router = APIRouter(tags=["votos"])
 
 
-def _allowed_parties(db: Session, table_id: int) -> dict[Category, set[int]]:
+def _allowed_parties(db: Session, table_id: int, process_id: int) -> dict[Category, set[int]]:
+    """Devuelve los partidos permitidos por categoria para una mesa.
+
+    Si existen registros TableParty explicitos para la mesa, se usan esos.
+    Si no hay ninguno, se devuelven TODOS los partidos del proceso para
+    todas las categorias (fallback automatico).
+    """
     rows = db.execute(select(TableParty).where(TableParty.table_id == table_id)).scalars().all()
     result: dict[Category, set[int]] = {cat: set() for cat in Category}
-    for row in rows:
-        result[row.category].add(row.party_id)
+    if rows:
+        for row in rows:
+            result[row.category].add(row.party_id)
+    else:
+        # Fallback: todos los partidos del proceso aplican a todas las categorias
+        all_party_ids = set(
+            db.execute(
+                select(PoliticalParty.id).where(PoliticalParty.process_id == process_id)
+            ).scalars().all()
+        )
+        for cat in Category:
+            result[cat] = set(all_party_ids)
     return result
 
 
@@ -82,7 +98,7 @@ def get_table_context(
     table_id: int, db: Session = Depends(get_db), user: User = Depends(get_current_user)
 ):
     table = ensure_table_access(db, user, table_id)
-    allowed = _allowed_parties(db, table.id)
+    allowed = _allowed_parties(db, table.id, table.process_id)
     parties = db.execute(
         select(PoliticalParty).where(
             PoliticalParty.process_id == table.process_id
@@ -118,7 +134,7 @@ def get_table_context(
 def _validate_input(
     db: Session, table: PollingTable, payload: VoteRecordInput
 ) -> tuple[int, int, list[VoteEntry]]:
-    allowed = _allowed_parties(db, table.id)
+    allowed = _allowed_parties(db, table.id, table.process_id)
     electores = (
         payload.electores_habilitados
         if payload.electores_habilitados is not None
