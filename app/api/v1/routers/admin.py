@@ -223,10 +223,25 @@ def create_table(payload: PollingTableCreate, db: Session = Depends(get_db)):
 
 
 @router.get("/tables", response_model=list[PollingTableRead])
-def list_tables(process_id: int, school_id: int | None = None, db: Session = Depends(get_db)):
+def list_tables(
+    process_id: int,
+    school_id: int | None = None,
+    search: str | None = None,
+    db: Session = Depends(get_db),
+):
     stmt = select(PollingTable).where(PollingTable.process_id == process_id)
     if school_id:
         stmt = stmt.where(PollingTable.school_id == school_id)
+    if search and search.strip():
+        from sqlalchemy import String, cast, or_
+
+        term = f"%{search.strip()}%"
+        stmt = stmt.where(
+            or_(
+                cast(PollingTable.number, String).ilike(term),
+                PollingTable.code.ilike(term),
+            )
+        )
     return db.execute(stmt.order_by(PollingTable.number)).scalars().all()
 
 
